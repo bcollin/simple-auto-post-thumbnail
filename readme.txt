@@ -5,6 +5,8 @@ Requires at least: 3.6.1
 Tested up to: 4.9.11
 Stable tag: 0.1
 
+@todo Everything.
+
 Automatically generate the Post Thumbnail (Featured Thumbnail) from the first image in post or any custom post type only if Post Thumbnail is not set manually.
 
 == Description ==
