@@ -1,10 +1,5 @@
 <?php
 
-// @todo Fix things like truthy and falsy comparisons.
-// @todo Remove $log and my_log().
-
-$log = '/temp/wordpress-dev-log.txt';
-
 /*
 Plugin Name: Simple Auto Post Thumbnail
 Plugin URI: http://www.abeleto.nl
@@ -250,12 +245,4 @@ function sapt_curl_get_file_contents( $url ) {
 	curl_close( $c );
 
 	return $contents;
-}
-
-/* Temporary watchdog. @todo remove. */
-function my_log( $str = '' ) {
-	global $log;
-	if ( '' === $str ) { return false; }
-	$str = $str . "\r\n\r\n";
-	file_put_contents( $log, $str, FILE_APPEND );
 }
