@@ -1,8 +1,8 @@
-= Simple Auto Post Thumbnail =
+# Simple Auto Post Thumbnail 
 
 This Wordpress plugin turns the first image in the content of a post into that post's thumbnail.
 
-== Description ==
+## Description 
 
 This is a fork of version 3.4.1 of the Auto Post Thumbnail plugin.
 
@@ -10,7 +10,7 @@ Upon publishing a post, this plugin scans that post's content for an image. The 
 
 It can do this both for images hosted on the same site as for images hosted elsewhere. 
 
-=== What are thumbnails? ===
+### What are thumbnails?
 
 Wordpress offers webmasters the option to designate one image the Featured Image or Post Thumbnail. 
 
@@ -20,13 +20,13 @@ See https://en.support.wordpress.com/featured-images/ for an extended explanatio
 
 Although it is probably best if the webmaster pre-determines the use of featured images they have and then manually add those featured images to each post based on those needs, sometimes you just want a default featured image just to have /something/. Simple Auto Post Thumbnail helps with this.
 
-=== Missing functionality ===
+### Missing functionality
 
 The first thing I did when I forked Auto Post Thumbnail was rip out the bit that generates thumbnails for the entire site. The functionality that is left only generates a thumbnail when you manually save (Update or Publish) a post that did yet not have a thumbnail.
 
 If you like SAPT and need that functionality, either use Auto Post Thumbnail, which is still being developed (see below), or talk to me.
 
-=== Rationale ===
+### Rationale
 
 The original Auto Post Thumbnail plugin by Sanisoft was fairly useful and fairly popular, but also fairly buggy. At some point it simply stopped working. This was possibly due to changes in either Wordpress or PHP, the language that Wordpress is programmed in. 
 
