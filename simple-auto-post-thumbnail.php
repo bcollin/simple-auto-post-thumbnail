@@ -1,8 +1,8 @@
 <?php
 
+// @todo Check if all functions get called at least once.
 // @todo Read everything close, make sure the code 'reads' well.
 // @todo Fix things like truthy and falsy comparisons.
-// @todo Apply coding style.
 // @todo Remove $log and my_log().
 
 $log = '/temp/wordpress-dev-log.txt';
@@ -39,54 +39,29 @@ Author URI: http://www.abeleto.nl
  * This was the last version by Sanisoft.
  */
 
-add_action('publish_post', 'sapt_publish_post');
+add_action( 'publish_post', 'sapt_publish_post' );
 // This hook will now handle all sort publishing including posts, custom types, scheduled posts, etc.
-add_action('transition_post_status', 'sapt_check_required_transition', 10, 3);
-add_action('admin_notices', 'sapt_check_perms');
-add_action('wp_ajax_generatepostthumbnail', 'sapt_ajax_process_post'); // Hook to implement AJAX request
-
-/**
- * Process single post to generate the post thumbnail
- *
- * @return void
- */
-function sapt_ajax_process_post() {
-	if ( !current_user_can( 'manage_options' ) ) {
-		die('-1');
-	}
-
-	$id = (int) $_POST['id'];
-
-	if ( empty($id) ) {
-		die('-1');
-	}
-
-	set_time_limit( 60 );
-
-	// Pass on the id to our 'publish' callback function.
-	sapt_publish_post($id);
-
-	die(-1);
-} //End sapt_ajax_process_post()
+add_action( 'transition_post_status', 'sapt_check_required_transition', 10, 3 );
+add_action( 'admin_notices', 'sapt_check_perms' );
 
 /**
  * Check whether the required directory structure is available so that the plugin can create thumbnails if needed.
  * If not, don't allow plugin activation.
  */
 function sapt_check_perms() {
-    $uploads = wp_upload_dir(current_time('mysql'));
+	$uploads = wp_upload_dir( current_time( 'mysql' ) );
 
-    if ($uploads['error']) {
-        echo '<div class="updated"><p>';
-        echo $uploads['error'];
+	if ( $uploads['error'] ) {
+		echo '<div class="updated"><p>';
+		echo $uploads['error'];
 
-        if ( function_exists('deactivate_plugins') ) {
-            deactivate_plugins('auto-post-thumbnail/auto-post-thumbnail.php', 'auto-post-thumbnail.php' );
-            echo '<br /> This plugin has been automatically deactivated.';
-        }
+		if ( function_exists( 'deactivate_plugins' ) ) {
+			deactivate_plugins('simple-auto-post-thumbnail/simple-auto-post-thumbnail.php', 'simple-auto-post-thumbnail.php' );
+			echo '<br /> This plugin has been automatically deactivated.';
+		}
 
-        echo '</p></div>';
-    }
+		echo '</p></div>';
+	}
 }
 
 /**
@@ -97,170 +72,166 @@ function sapt_check_perms() {
  * @param $post
  * @return void
  */
-function sapt_check_required_transition($new_status='', $old_status='', $post='') {
-
-    if ('publish' == $new_status) {
-        sapt_publish_post($post->ID);
-    }
+function sapt_check_required_transition( $new_status = '', $old_status = '', $post = null ) {
+	if ( 'publish' === $new_status && ! empty( $post->ID ) ) {
+		sapt_publish_post( $post->ID );
+	}
 }
 
 /**
  * Function to save first image in post as post thumbmail.
  */
-function sapt_publish_post( $post_id )
-{
-    global $wpdb;
+function sapt_publish_post( $post_id ) {
+	global $wpdb;
 
-    // First check whether Post Thumbnail is already set for this post.
-    if (get_post_meta($post_id, '_thumbnail_id', true) || get_post_meta($post_id, 'skip_post_thumb', true)) {
-        return;
-    }
+	// First check whether Post Thumbnail is already set for this post.
+	if ( get_post_meta( $post_id, '_thumbnail_id', true ) || get_post_meta( $post_id, 'skip_post_thumb', true ) ) {
+		return;
+	}
 
-    $post = $wpdb->get_results("SELECT * FROM {$wpdb->posts} WHERE id = $post_id");
+	$post = $wpdb->get_results( "SELECT * FROM {$wpdb->posts} WHERE id = $post_id" );
 
-    // Initialize variable used to store list of matched images as per provided regular expression
-    $matches = array();
-    
-    // Get all images from post's body
-    preg_match_all('/<\s*img [^\>]*src\s*=\s*[\""\']?([^\""\']*)[\""\']?[^\>]+\>/i', $post[0]->post_content, $matches);
+	// Initialize variable used to store list of matched images as per provided regular expression
+	$matches = array();
 
-    if ( ! empty( $matches ) ) {
-        foreach ($matches[0] as $key => $image) {
-            /**
-             * If the image is from wordpress's own Media gallery, then it appends the thumbmail id to a CSS class.
-             * Look for this id in the IMG tag.
-             */
-            preg_match( '/wp-image-([\d]*)/i', $image, $id_matches );
-            if( $id_matches ){
-                $thumb_id = $id_matches[1];
-            }
+	// Get all images from post's body
+	preg_match_all( '/<\s*img [^\>]*src\s*=\s*[\""\']?([^\""\']*)[\""\']?[^\>]+\>/i', $post[0]->post_content, $matches );
 
-            // If thumb id is not found, try to look for the image in DB. Thanks to "Erwin Vrolijk" for providing this code.
-            if ( ! $thumb_id ) {
-                $image = substr( $image, strpos($image, '"' ) + 1 );
-                $result = $wpdb->get_results( "SELECT ID FROM {$wpdb->posts} WHERE guid = '".$image."'" );
-                if( $result ){
-                    $thumb_id = $result[0]->ID;
-                }
-                
-            }
+	if ( ! empty( $matches ) ) {
+		foreach ( $matches[0] as $key => $image ) {
+			/**
+			* If the image is from wordpress's own Media gallery, then it appends the thumbmail id to a CSS class.
+			* Look for this id in the IMG tag.
+			*/
+			preg_match( '/wp-image-([\d]*)/i', $image, $id_matches );
+			if ( $id_matches ) {
+				$thumb_id = $id_matches[1];
+			}
 
-            // Ok. Still no id found. Some other way used to insert the image in post. Now we must fetch the image from URL and do the needful.
-            if ( ! $thumb_id ) {
-                $thumb_id = sapt_generate_post_thumb($matches, $key, $post[0]->post_content, $post_id);
-            }
-            
-            // If we succeed in generating thumg, let's update post meta
-            if ($thumb_id) {
-                update_post_meta( $post_id, '_thumbnail_id', $thumb_id );
-                break;
-            }
-        }
-    }
+			// If thumb id is not found, try to look for the image in DB. Thanks to "Erwin Vrolijk" for providing this code.
+			if ( empty( $thumb_id ) ) {
+				$image = substr( $image, strpos($image, '"' ) + 1 );
+				$result = $wpdb->get_results( "SELECT ID FROM {$wpdb->posts} WHERE guid = '".$image."'" );
+
+				if ( $result ){
+					$thumb_id = $result[0]->ID;
+				}
+			}
+
+			// Ok. Still no id found. Some other way used to insert the image in post. Now we must fetch the image from URL and do the needful.
+			if ( empty( $thumb_id ) ) {
+				$thumb_id = sapt_generate_post_thumb( $matches, $key, $post[0]->post_content, $post_id );
+			}
+
+			// If we succeed in generating thumg, let's update post meta
+			if ( ! empty ( $thumb_id ) ) {
+				update_post_meta( $post_id, '_thumbnail_id', $thumb_id );
+				break;
+			}
+		}
+	}
 }// end sapt_publish_post()
 
 /**
  * Function to fetch the image from URL and generate the required thumbnails
  */
-function sapt_generate_post_thumb($matches, $key, $post_content, $post_id)
-{
-    // Make sure to assign correct title to the image. Extract it from img tag
-    $imageTitle = '';
-    preg_match_all('/<\s*img [^\>]*title\s*=\s*[\""\']?([^\""\'>]*)/i', $post_content, $matchesTitle);
+function sapt_generate_post_thumb( $matches, $key, $post_content, $post_id ) {
+	// Make sure to assign correct title to the image. Extract it from img tag
+	$imageTitle = '';
+	preg_match_all( '/<\s*img [^\>]*title\s*=\s*[\""\']?([^\""\'>]*)/i', $post_content, $matchesTitle );
 
-    if (count($matchesTitle) && isset($matchesTitle[1])) {
-        $imageTitle = $matchesTitle[1][$key];
-    }
+	if ( ! empty ( $matchesTitle ) && isset( $matchesTitle[1] ) ) {
+		$imageTitle = $matchesTitle[1][$key];
+	}
 
-    // Get the URL now for further processing
-    $imageUrl = $matches[1][$key];
+	// Get the URL now for further processing
+	$imageUrl = $matches[1][$key];
 
-    // Get the file name
-    $filename = substr($imageUrl, ( strrpos( $imageUrl, '/') ) + 1 );
+	// Get the file name
+	$filename = substr($imageUrl, ( strrpos( $imageUrl, '/' ) ) + 1 );
 
-    if ( ! ( ( $uploads = wp_upload_dir( current_time( 'mysql' ) ) ) && false === $uploads['error'] ) ) {
-        return null;
-    }
+	if ( ! ( ( $uploads = wp_upload_dir( current_time( 'mysql' ) ) ) && false === $uploads['error'] ) ) {
+		return null;
+	}
 
-    // Generate unique file name
-    $filename = wp_unique_filename( $uploads['path'], $filename );
+	// Generate unique file name
+	$filename = wp_unique_filename( $uploads['path'], $filename );
 
-    // Move the file to the uploads dir
-    $new_file = $uploads['path'] . "/$filename";
+	// Move the file to the uploads dir
+	$new_file = $uploads['path'] . "/$filename";
 
-    if ( ! ini_get( 'allow_url_fopen' ) ) {
-        $file_data = sapt_curl_get_file_contents( $imageUrl );
-    } else {
-        $file_data = file_get_contents( $imageUrl );
-    }
+	if ( ! ini_get( 'allow_url_fopen' ) ) {
+		$file_data = sapt_curl_get_file_contents( $imageUrl );
+	} else {
+		$file_data = file_get_contents( $imageUrl );
+	}
 
-    if ( ! $file_data ) {
-        return null;
-    }
+	if ( empty ( $file_data ) ) {
+		return null;
+	}
 
-    //Fix for checking file extensions
-    $exts = explode( ".", $filename );
-    if( count( $exts ) > 2 ) { 
-      return null; 
-    }
-    $mimes = get_allowed_mime_types();
-    $ext = pathinfo( $new_file, PATHINFO_EXTENSION );
+	//Fix for checking file extensions
+	$exts = explode( ".", $filename );
+	if ( count( $exts ) > 2 ) { 
+		return null; 
+	}
+	$mimes = get_allowed_mime_types();
+	$ext = pathinfo( $new_file, PATHINFO_EXTENSION );
 
-    foreach ( $mimes as $ext_preg => $mime_match ) {
-      $ext_preg = '!^(' . $ext_preg . ')$!i';
-      $collect .= $ext_preg . ':::';
-      if ( preg_match( $ext_preg, $ext ) ) {
-        $allowed = true;
-        break;
-      }
-    }
+	foreach ( $mimes as $ext_preg => $mime_match ) {
+		$ext_preg = '!^(' . $ext_preg . ')$!i';
+		if ( preg_match( $ext_preg, $ext ) ) {
+			$allowed = true;
+			break;
+		}
+	}
 
-    if( ! $allowed ) { 
-      return null; 
-    }
+	if ( ! $allowed ) { 
+		return null; 
+	}
 
-    $result = file_put_contents( $new_file, $file_data );
-    $result = $result ? $result : 'false';
+	file_put_contents( $new_file, $file_data );
 
-    // Set correct file permissions
-    $stat = stat( dirname( $new_file ) );
-    $perms = $stat['mode'] & 0000666;
-    @ chmod( $new_file, $perms );
+	// Set correct file permissions
+	$stat = stat( dirname( $new_file ) );
+	$perms = $stat['mode'] & 0000666;
+	chmod( $new_file, $perms );
 
-    // Get the file type. Must to use it as a post thumbnail.
-    $wp_filetype = wp_check_filetype( $filename, $mimes );
+	// Get the file type. Must to use it as a post thumbnail.
+	$wp_filetype = wp_check_filetype( $filename, $mimes );
+	
+	// No file type! No point to proceed further
+	if ( ( empty( $wp_filetype ) || empty( $wp_filetype ) ) && ! current_user_can( 'unfiltered_upload' ) ) {
+		return null;
+	}
 
-    extract( $wp_filetype );
+	$type = $wp_filetype['type'];
+	$ext = $wp_filetype['ext'];
 
-    // No file type! No point to proceed further
-    if ( ( !$type || !$ext ) && !current_user_can( 'unfiltered_upload' ) ) {
-        return null;
-    }
+	// Compute the URL
+	$url = $uploads['url'] . "/$filename";
 
-    // Compute the URL
-    $url = $uploads['url'] . "/$filename";
+	// Construct the attachment array
+	$attachment = array(
+		'post_mime_type' => $type,
+		'guid' => $url,
+		'post_parent' => null,
+		'post_title' => $imageTitle,
+		'post_content' => '',
+	);
 
-    // Construct the attachment array
-    $attachment = array(
-        'post_mime_type' => $type,
-        'guid' => $url,
-        'post_parent' => null,
-        'post_title' => $imageTitle,
-        'post_content' => '',
-    );
+	$thumb_id = wp_insert_attachment( $attachment, $file, $post_id );
+	if ( ! is_wp_error( $thumb_id ) ) {
+		require_once( ABSPATH . '/wp-admin/includes/image.php' );
 
-    $thumb_id = wp_insert_attachment($attachment, $file, $post_id);
-    if ( !is_wp_error($thumb_id) ) {
-        require_once(ABSPATH . '/wp-admin/includes/image.php');
+		// Added fix by misthero as suggested
+		wp_update_attachment_metadata( $thumb_id, wp_generate_attachment_metadata( $thumb_id, $new_file ) );
+		update_attached_file( $thumb_id, $new_file );
 
-        // Added fix by misthero as suggested
-        wp_update_attachment_metadata( $thumb_id, wp_generate_attachment_metadata( $thumb_id, $new_file ) );
-        update_attached_file( $thumb_id, $new_file );
+		return $thumb_id;
+	}
 
-        return $thumb_id;
-    }
-
-    return null;
+	return null;
 }
 
 /**
@@ -269,19 +240,20 @@ function sapt_generate_post_thumb($matches, $key, $post_content, $post_id)
  * Copied from user comment on php.net (http://in.php.net/manual/en/function.file-get-contents.php#82255)
  */
 function sapt_curl_get_file_contents( $url ) {
-    $c = curl_init();
-    curl_setopt( $c, CURLOPT_RETURNTRANSFER, true );
-    curl_setopt( $c, CURLOPT_URL, $url );
-    $contents = curl_exec( $c ); // Returns the file contents or the boolean false
-    $info = curl_getinfo();
-    curl_close( $c );
+	$c = curl_init();
+	curl_setopt( $c, CURLOPT_RETURNTRANSFER, true );
+	curl_setopt( $c, CURLOPT_URL, $url );
+	$contents = curl_exec( $c ); // Returns the file contents or the boolean false
+	$info = curl_getinfo();
+	curl_close( $c );
 
-    return $contents;
+	return $contents;
 }
 
+/* Temporary watchdog. @todo remove. */
 function my_log( $str = '' ) {
-  global $log;
-  if ( '' === $str ) { return false; }
-  $str = $str . "\r\n\r\n";
-  file_put_contents( $log, $str, FILE_APPEND );
+	global $log;
+	if ( '' === $str ) { return false; }
+	$str = $str . "\r\n\r\n";
+	file_put_contents( $log, $str, FILE_APPEND );
 }
