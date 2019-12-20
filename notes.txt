@@ -1,0 +1,15 @@
+
+2019-12-20: 
+
+There were two bug in Auto Post Thumbnail that caused it to stop generating thumbnails at some point;  maybe after either a Wordpress or a PHP update? 
+
+First, the plugin tried to find the id of images that had already been uploaded, but the regular expression that tried to find the first image in the body of a post did not match the entire IMG tag and would therefore often skip the class name that contained the IMG id.
+
+Second, for externally hosted images, but also for images for which it was unable to find an id, further processing would be handed to a function called apt_generate_post_thumb(), which amongst others would try to determine if the current user was allowed to upload images. 
+
+It did this by calling a WP function called get_allowed_mime_types() and compare its output to the filename extension of the image (.jpg, .png, .gif and so on). 
+
+The plugin seemed to work on the assumption that get_allowed_mime_types() returns an array of extensions, except it doesn't, not quite. The function get_allowed_mime_types() returns an array of regular expressions against which an extension can be matched. Often, the regular expression is exactly the same as the extension (for example 'gif', 'png') and then a straight comparison $regex === $extension works, but some cases, for example 'jpg|jpeg|jpe' require a different type of test, e.g. preg_match( '/' . $regex . '/', $extension).
+
+Fixing both bugs made the plugin generate thumbnails again, with an added bonus of no longer uploading images that the site already knows about.
+

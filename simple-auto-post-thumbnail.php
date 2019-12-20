@@ -1,5 +1,12 @@
 <?php
 
+// @todo Read everything close, make sure the code 'reads' well.
+// @todo Fix things like truthy and falsy comparisons.
+// @todo Apply coding style.
+// @todo Remove $log and my_log().
+
+$log = '/temp/wordpress-dev-log.txt';
+
 /*
 Plugin Name: Simple Auto Post Thumbnail
 Plugin URI: http://www.abeleto.nl
@@ -28,7 +35,8 @@ Author URI: http://www.abeleto.nl
 */
 
 /**
- * This is a fork of Auto Post Thumbnail.
+ * This is a fork of Auto Post Thumbnail version 3.4.1.
+ * This was the last version by Sanisoft.
  */
 
 add_action('publish_post', 'sapt_publish_post');
@@ -43,22 +51,22 @@ add_action('wp_ajax_generatepostthumbnail', 'sapt_ajax_process_post'); // Hook t
  * @return void
  */
 function sapt_ajax_process_post() {
-    if ( !current_user_can( 'manage_options' ) ) {
-        die('-1');
-    }
+	if ( !current_user_can( 'manage_options' ) ) {
+		die('-1');
+	}
 
-    $id = (int) $_POST['id'];
+	$id = (int) $_POST['id'];
 
-    if ( empty($id) ) {
-        die('-1');
-    }
+	if ( empty($id) ) {
+		die('-1');
+	}
 
-    set_time_limit( 60 );
+	set_time_limit( 60 );
 
-    // Pass on the id to our 'publish' callback function.
-    sapt_publish_post($id);
+	// Pass on the id to our 'publish' callback function.
+	sapt_publish_post($id);
 
-    die(-1);
+	die(-1);
 } //End sapt_ajax_process_post()
 
 /**
@@ -99,7 +107,7 @@ function sapt_check_required_transition($new_status='', $old_status='', $post=''
 /**
  * Function to save first image in post as post thumbmail.
  */
-function sapt_publish_post($post_id)
+function sapt_publish_post( $post_id )
 {
     global $wpdb;
 
@@ -112,36 +120,36 @@ function sapt_publish_post($post_id)
 
     // Initialize variable used to store list of matched images as per provided regular expression
     $matches = array();
-
+    
     // Get all images from post's body
-    preg_match_all('/<\s*img [^\>]*src\s*=\s*[\""\']?([^\""\'>]*)/i', $post[0]->post_content, $matches);
+    preg_match_all('/<\s*img [^\>]*src\s*=\s*[\""\']?([^\""\']*)[\""\']?[^\>]+\>/i', $post[0]->post_content, $matches);
 
-    if (count($matches)) {
+    if ( ! empty( $matches ) ) {
         foreach ($matches[0] as $key => $image) {
             /**
-             * If the image is from wordpress's own media gallery, then it appends the thumbmail id to a css class.
+             * If the image is from wordpress's own Media gallery, then it appends the thumbmail id to a CSS class.
              * Look for this id in the IMG tag.
              */
-            preg_match('/wp-image-([\d]*)/i', $image, $thumb_id);
-            if($thumb_id){
-                $thumb_id = $thumb_id[1];
+            preg_match( '/wp-image-([\d]*)/i', $image, $id_matches );
+            if( $id_matches ){
+                $thumb_id = $id_matches[1];
             }
 
             // If thumb id is not found, try to look for the image in DB. Thanks to "Erwin Vrolijk" for providing this code.
-            if (!$thumb_id) {
-                $image = substr($image, strpos($image, '"')+1);
-                $result = $wpdb->get_results("SELECT ID FROM {$wpdb->posts} WHERE guid = '".$image."'");
-                if($result){
+            if ( ! $thumb_id ) {
+                $image = substr( $image, strpos($image, '"' ) + 1 );
+                $result = $wpdb->get_results( "SELECT ID FROM {$wpdb->posts} WHERE guid = '".$image."'" );
+                if( $result ){
                     $thumb_id = $result[0]->ID;
                 }
                 
             }
 
             // Ok. Still no id found. Some other way used to insert the image in post. Now we must fetch the image from URL and do the needful.
-            if (!$thumb_id) {
+            if ( ! $thumb_id ) {
                 $thumb_id = sapt_generate_post_thumb($matches, $key, $post[0]->post_content, $post_id);
             }
-
+            
             // If we succeed in generating thumg, let's update post meta
             if ($thumb_id) {
                 update_post_meta( $post_id, '_thumbnail_id', $thumb_id );
@@ -168,9 +176,9 @@ function sapt_generate_post_thumb($matches, $key, $post_content, $post_id)
     $imageUrl = $matches[1][$key];
 
     // Get the file name
-    $filename = substr($imageUrl, (strrpos($imageUrl, '/'))+1);
+    $filename = substr($imageUrl, ( strrpos( $imageUrl, '/') ) + 1 );
 
-    if (!(($uploads = wp_upload_dir(current_time('mysql')) ) && false === $uploads['error'])) {
+    if ( ! ( ( $uploads = wp_upload_dir( current_time( 'mysql' ) ) ) && false === $uploads['error'] ) ) {
         return null;
     }
 
@@ -180,27 +188,42 @@ function sapt_generate_post_thumb($matches, $key, $post_content, $post_id)
     // Move the file to the uploads dir
     $new_file = $uploads['path'] . "/$filename";
 
-    if (!ini_get('allow_url_fopen')) {
-        $file_data = curl_get_file_contents($imageUrl);
+    if ( ! ini_get( 'allow_url_fopen' ) ) {
+        $file_data = sapt_curl_get_file_contents( $imageUrl );
     } else {
-        $file_data = @file_get_contents($imageUrl);
+        $file_data = file_get_contents( $imageUrl );
     }
 
-    if (!$file_data) {
+    if ( ! $file_data ) {
         return null;
     }
 
     //Fix for checking file extensions
-    $exts = explode(".",$filename);
-	if(count($exts)>2)return null;
-	$allowed=get_allowed_mime_types();
-	$ext=pathinfo($new_file,PATHINFO_EXTENSION);
-	if(!array_key_exists($ext,$allowed))return null;
+    $exts = explode( ".", $filename );
+    if( count( $exts ) > 2 ) { 
+      return null; 
+    }
+    $mimes = get_allowed_mime_types();
+    $ext = pathinfo( $new_file, PATHINFO_EXTENSION );
 
-    file_put_contents($new_file, $file_data);
+    foreach ( $mimes as $ext_preg => $mime_match ) {
+      $ext_preg = '!^(' . $ext_preg . ')$!i';
+      $collect .= $ext_preg . ':::';
+      if ( preg_match( $ext_preg, $ext ) ) {
+        $allowed = true;
+        break;
+      }
+    }
+
+    if( ! $allowed ) { 
+      return null; 
+    }
+
+    $result = file_put_contents( $new_file, $file_data );
+    $result = $result ? $result : 'false';
 
     // Set correct file permissions
-    $stat = stat( dirname( $new_file ));
+    $stat = stat( dirname( $new_file ) );
     $perms = $stat['mode'] & 0000666;
     @ chmod( $new_file, $perms );
 
@@ -245,16 +268,20 @@ function sapt_generate_post_thumb($matches, $key, $post_content, $post_id)
  *
  * Copied from user comment on php.net (http://in.php.net/manual/en/function.file-get-contents.php#82255)
  */
-function curl_get_file_contents($URL) {
+function sapt_curl_get_file_contents( $url ) {
     $c = curl_init();
-    curl_setopt($c, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($c, CURLOPT_URL, $URL);
-    $contents = curl_exec($c);
-    curl_close($c);
+    curl_setopt( $c, CURLOPT_RETURNTRANSFER, true );
+    curl_setopt( $c, CURLOPT_URL, $url );
+    $contents = curl_exec( $c ); // Returns the file contents or the boolean false
+    $info = curl_getinfo();
+    curl_close( $c );
 
-    if ($contents) {
-        return $contents;
-    }
+    return $contents;
+}
 
-    return FALSE;
+function my_log( $str = '' ) {
+  global $log;
+  if ( '' === $str ) { return false; }
+  $str = $str . "\r\n\r\n";
+  file_put_contents( $log, $str, FILE_APPEND );
 }
