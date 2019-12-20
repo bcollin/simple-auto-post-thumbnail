@@ -1,7 +1,5 @@
 <?php
 
-// @todo Check if all functions get called at least once.
-// @todo Read everything close, make sure the code 'reads' well.
 // @todo Fix things like truthy and falsy comparisons.
 // @todo Remove $log and my_log().
 
@@ -67,9 +65,10 @@ function sapt_check_perms() {
 /**
  * Function to check whether scheduled post is being published. If so, sapt_publish_post should be called.
  *
- * @param $new_status
- * @param $old_status
- * @param $post
+ * @param (string) $new_status
+ * @param (string) $old_status
+ * @param (object) $post
+ *
  * @return void
  */
 function sapt_check_required_transition( $new_status = '', $old_status = '', $post = null ) {
@@ -98,32 +97,33 @@ function sapt_publish_post( $post_id ) {
 	preg_match_all( '/<\s*img [^\>]*src\s*=\s*[\""\']?([^\""\']*)[\""\']?[^\>]+\>/i', $post[0]->post_content, $matches );
 
 	if ( ! empty( $matches ) ) {
-		foreach ( $matches[0] as $key => $image ) {
-			/**
-			* If the image is from wordpress's own Media gallery, then it appends the thumbmail id to a CSS class.
-			* Look for this id in the IMG tag.
-			*/
-			preg_match( '/wp-image-([\d]*)/i', $image, $id_matches );
+		foreach ( $matches[0] as $key => $image_tag ) {
+			$url = $matches[1][$key];
+			
+			//If the image is from Wordpress's own Media gallery, then it appends 
+			// the thumbmail ID to a CSS class. Look for this ID in the IMG tag.
+			preg_match( '/wp-image-([\d]*)/i', $image_tag, $id_matches );
 			if ( $id_matches ) {
 				$thumb_id = $id_matches[1];
 			}
 
-			// If thumb id is not found, try to look for the image in DB. Thanks to "Erwin Vrolijk" for providing this code.
+			// If thumb ID is not found, try to look for the image in DB. Thanks to 
+			// Erwin Vrolijk for providing this code.
 			if ( empty( $thumb_id ) ) {
-				$image = substr( $image, strpos($image, '"' ) + 1 );
-				$result = $wpdb->get_results( "SELECT ID FROM {$wpdb->posts} WHERE guid = '".$image."'" );
+				$result = $wpdb->get_results( "SELECT ID FROM {$wpdb->posts} WHERE guid = '" . $url . "'" );
 
 				if ( $result ){
 					$thumb_id = $result[0]->ID;
 				}
 			}
 
-			// Ok. Still no id found. Some other way used to insert the image in post. Now we must fetch the image from URL and do the needful.
+			// Ok. Still no ID found. Some other way used to insert the image in 
+			// post. Now we must fetch the image from URL and do the needful.
 			if ( empty( $thumb_id ) ) {
-				$thumb_id = sapt_generate_post_thumb( $matches, $key, $post[0]->post_content, $post_id );
+				$thumb_id = sapt_generate_post_thumb( $url, $image_tag, $post_id );
 			}
 
-			// If we succeed in generating thumg, let's update post meta
+			// If we succeeded in finding a thumb ID, let's update post meta
 			if ( ! empty ( $thumb_id ) ) {
 				update_post_meta( $post_id, '_thumbnail_id', $thumb_id );
 				break;
@@ -134,21 +134,24 @@ function sapt_publish_post( $post_id ) {
 
 /**
  * Function to fetch the image from URL and generate the required thumbnails
+ * 
+ * @param (string) $url       URL of the image.
+ * @param (string) $img_tag   HTML img tag from the post's content.
+ * @param (int)    $post_id   Post ID.
+ * 
+ * @return (void|string)      The ID of the thumbnail or null.
  */
-function sapt_generate_post_thumb( $matches, $key, $post_content, $post_id ) {
+function sapt_generate_post_thumb( $url, $img_tag, $post_id ) {
 	// Make sure to assign correct title to the image. Extract it from img tag
 	$imageTitle = '';
-	preg_match_all( '/<\s*img [^\>]*title\s*=\s*[\""\']?([^\""\'>]*)/i', $post_content, $matchesTitle );
+	preg_match_all( '/title\s*=\s*[\""\']?([^\""\'>]*)/i', $img_tag, $matchesTitle );
 
 	if ( ! empty ( $matchesTitle ) && isset( $matchesTitle[1] ) ) {
-		$imageTitle = $matchesTitle[1][$key];
+		$imageTitle = $url;
 	}
 
-	// Get the URL now for further processing
-	$imageUrl = $matches[1][$key];
-
 	// Get the file name
-	$filename = substr($imageUrl, ( strrpos( $imageUrl, '/' ) ) + 1 );
+	$filename = substr($url, ( strrpos( $url, '/' ) ) + 1 );
 
 	if ( ! ( ( $uploads = wp_upload_dir( current_time( 'mysql' ) ) ) && false === $uploads['error'] ) ) {
 		return null;
@@ -161,9 +164,9 @@ function sapt_generate_post_thumb( $matches, $key, $post_content, $post_id ) {
 	$new_file = $uploads['path'] . "/$filename";
 
 	if ( ! ini_get( 'allow_url_fopen' ) ) {
-		$file_data = sapt_curl_get_file_contents( $imageUrl );
+		$file_data = sapt_curl_get_file_contents( $url );
 	} else {
-		$file_data = file_get_contents( $imageUrl );
+		$file_data = file_get_contents( $url );
 	}
 
 	if ( empty ( $file_data ) ) {
@@ -244,7 +247,6 @@ function sapt_curl_get_file_contents( $url ) {
 	curl_setopt( $c, CURLOPT_RETURNTRANSFER, true );
 	curl_setopt( $c, CURLOPT_URL, $url );
 	$contents = curl_exec( $c ); // Returns the file contents or the boolean false
-	$info = curl_getinfo();
 	curl_close( $c );
 
 	return $contents;
